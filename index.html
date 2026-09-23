@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hermes Agent · 六步闯关式交互式学习</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* ── 主题变量 ── */
+  :root {
+    --bg-0: #0c0e14;
+    --bg-1: #12151e;
+    --bg-2: #1a1e2a;
+    --bg-3: #222738;
+    --border: #2d3348;
+    --text-1: #e8edf5;
+    --text-2: #94a3b8;
+    --text-3: #64748b;
+    --accent: #60a5fa;
+    --accent-2: #a78bfa;
+    --green: #4ade80;
+    --yellow: #facc15;
+    --red: #f87171;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    --font-sans: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg-0);
+    color: var(--text-1);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.65;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── 滚动条 ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+  /* ── 布局容器 ── */
+  .app {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── 顶部栏 ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+    color: var(--text-1);
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 800; color: #fff;
+    box-shadow: 0 4px 12px rgba(96,165,250,0.25);
+  }
+
+  /* ── 进度条 ── */
+  .progress-wrap {
+    flex: 1;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .progress-track {
+    height: 6px;
+    background: var(--bg-3);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 3px;
+    transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+  }
+
+  /* ── 关卡导航 ── */
+  .level-nav {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .level-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font-sans);
+  }
+  .level-btn:hover:not(.locked) {
+    border-color: var(--accent);
+    color: var(--text-1);
+    background: var(--bg-2);
+  }
+  .level-btn.active {
+    background: var(--bg-2);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .level-btn.locked {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .level-btn .badge {
+    font-size: 11px;
+    background: var(--bg-3);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--text-3);
+    font-weight: 600;
+  }
+  .level-btn.done .badge {
+    background: rgba(74,222,128,0.15);
+    color: var(--green);
+  }
+  .level-btn .num {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-1);
+  }
+
+  /* ── 内容面板 ── */
+  .stage-panel {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    display: none;
+    animation: fadeSlide 0.35s ease-out;
+  }
+  .stage-panel.active { display: block; }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .stage-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .stage-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(96,165,250,0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+  .stage-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-1);
+  }
+  .stage-sub {
+    font-size: 13px;
+    color: var(--text-3);
+    margin-left: auto;
+  }
+
+  /* ── 知识点卡片 ── */
+  .card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .card h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .card ul, .card ol {
+    padding-left: 20px;
+    color: var(--text-2);
+  }
+  .card li { margin-bottom: 4px; }
+  .card p { color: var(--text-2); margin-bottom: 4px; }
+
+  /* ── 代码块 ── */
+  .code-block {
+    position: relative;
+    background: #0a0c12;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .code-block pre {
+    margin: 0;
+    padding: 14px 14px 14px 44px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: #c9d1d9;
+    overflow-x: auto;
+    white-space: pre;
+    tab-size: 2;
+  }
+  .code-block .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-3);
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: all 0.15s;
+    opacity: 0;
+  }
+  .code-block:hover .copy-btn { opacity: 1; }
+  .code-block .copy-btn:hover {
+    color: var(--text-1);
+    background: var(--bg-2);
+    border-color: var(--text-3);
+  }
+  .code-block .copy-btn.copied {
+    background: rgba(74,222,128,0.15);
+    color: var(--green);
+    border-color: var(--green);
+  }
+
+  /* ── 语法高亮（简易） ── */
+  .hl-kw { color: #ff7b72; }
+  .hl-str { color: #a5d6ff; }
+  .hl-cmt { color: #8b949e; font-style: italic; }
+  .hl-fn { color: #d2a8ff; }
+  .hl-num { color: #79c0ff; }
+  .hl-type { color: #ffa657; }
+  .hl-var { color: #ffa657; }
+  .hl-prop { color: #79c0ff; }
+  .hl-op  { color: #ff7b72; }
+  .hl-bg  { background: rgba(255,255,255,0.03); }
+
+  /* ── 扩展卡片 ── */
+  .expand-card {
+    background: rgba(167,139,250,0.06);
+    border-left: 3px solid var(--accent-2);
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+  }
+  .expand-card h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .expand-card p, .expand-card ul {
+    color: var(--text-2);
+    font-size: 14px;
+  }
+
+  /* ── 判断题 ── */
+  .quiz {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+  .quiz-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .quiz-item:last-child { border-bottom: none; }
+  .quiz-q {
+    font-weight: 500;
+    color: var(--text-1);
+    flex: 1;
+    font-size: 14px;
+  }
+  .quiz-opts {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .quiz-opt {
+    padding: 3px 10px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-2);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font-sans);
+    font-weight: 500;
+  }
+  .quiz-opt:hover { border-color: var(--accent); color: var(--text-1); }
+  .quiz-opt.selected {
+    background: rgba(96,165,250,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .quiz-opt.correct {
+    background: rgba(74,222,128,0.15);
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .quiz-opt.wrong {
+    background: rgba(248,113,113,0.15);
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .quiz-feedback {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-top: 2px;
+    min-height: 16px;
+  }
+  .quiz-feedback.correct { color: var(--green); }
+  .quiz-feedback.wrong   { color: var(--red); }
+
+  /* ── 完成按钮 ── */
+  .done-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font-sans);
+    box-shadow: 0 2px 8px rgba(96,165,250,0.3);
+  }
+  .done-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(96,165,250,0.4);
+  }
+  .done-btn:active { transform: translateY(0); }
+  .done-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+  .done-btn.done {
+    background: var(--green);
+    box-shadow: 0 2px 8px rgba(74,222,128,0.3);
+  }
+
+  /* ── 底部参考区 ── */
+  .refs {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    margin-top: 8px;
+  }
+  .refs h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+  }
+  .ref-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ref-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-2);
+    font-size: 12px;
+    text-decoration: none;
+    transition: all 0.15s;
+  }
+  .ref-link:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 16px;
+    color: var(--text-1);
+    font-size: 13px;
+    opacity: 0;
+    transition: all 0.3s;
+    pointer-events: none;
+    z-index: 999;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ── 响应式微调 ── */
+  @media (max-width: 640px) {
+    .app { padding: 16px 12px 40px; }
+    .topbar { gap: 10px; }
+    .logo { font-size: 16px; }
+    .stage-title { font-size: 18px; }
+    .code-block pre { padding: 12px 12px 12px 36px; font-size: 12px; }
+    .level-btn { font-size: 12px; padding: 4px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══ 顶部 ═══ -->
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-icon">H</div>
+      <span>Hermes Agent</span>
+      <span style="color:var(--text-3);font-weight:400;font-size:13px;">· 六步闯关</span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span>总进度</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 关卡导航 ═══ -->
+  <div class="level-nav" id="level-nav"></div>
+
+  <!-- ═══ 关卡内容容器 ═══ -->
+  <div id="stages-container"></div>
+
+  <!-- ═══ 底部参考 ═══ -->
+  <div class="refs">
+    <h3>📚 参考文献 · 官方文档</h3>
+    <div class="ref-list" id="ref-list"></div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   Hermes Agent 六步闯关学习 — 数据 + 渲染 + 交互
+   ═══════════════════════════════════════════════════════ */
+
+const STAGES = [
+  {
+    id: 1,
+    num: '01',
+    title: 'Installation',
+    subtitle: '安装 Hermes Agent',
+    lockNote: '完成上一关后解锁',
+    knowledge: [
+      { title: '安装器原理', body: 'Hermes 安装器是一个自解压脚本（curl / PowerShell），它自动完成以下工作：创建隔离的 Python 虚拟环境、安装 uv 包管理器、部署 Node.js（Playwright）、拉取 ripgrep 和 ffmpeg 到系统 PATH。用户无需手动安装任何运行时依赖。' },
+      { title: '内置组件作用', body: [
+        'uv — Python 包管理器 + 虚拟环境生命周期管理',
+        'Python 3.11+ — Hermes 本体运行环境（隔离 venv）',
+        'Node.js v18+ — 浏览器自动化（Playwright）依赖',
+        'ripgrep (rg) — 项目内快速文件搜索（系统 PATH）',
+        'ffmpeg — TTS / 音频格式转换（系统 PATH）',
+        'hermes CLI — 全局命令入口（~/.local/bin 或 /usr/local/bin）'
+      ]},
+      { title: '平台安装命令', body: [
+        'Linux / macOS / WSL2 / Termux:  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',
+        'Windows 原生（PowerShell）:     iex (irm https://hermes-agent.nousresearch.com/install.ps1)',
+        'Windows 推荐: 先装 WSL2，再在 WSL2 中跑 curl 脚本；也可下载 Hermes Desktop 安装器'
+      ]},
+      { title: '环境变量配置', body: '安装后将二进制路径加入 shell PATH：普通用户默认 ~/.local/bin，root 模式 /usr/local/bin。重载 shell 后即可全局使用 hermes 命令。' }
+    ],
+    codeExample: `<span class="hl-cmt"># ── Windows PowerShell 安装 ──</span>
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+
+<span class="hl-cmt"># ── 重载 shell（让 PATH 生效） ──</span>
+<span class="hl-kw">$</span> <span class="hl-fn">refreshenv</span>   <span class="hl-cmt"># 或关闭 re-opening PowerShell</span>
+
+<span class="hl-cmt"># ── 版本验证 ──</span>
+hermes --version
+<span class="hl-cmt"># 预期输出：hermes-agent x.y.z</span>
+
+<span class="hl-cmt"># ── 官方自检 ──</span>
+hermes doctor
+<span class="hl-cmt"># 检查依赖、模型配置、工具链。仅提示可忽略项即通过。</span>
+
+<span class="hl-cmt"># ── 彻底重装（谨慎：会删除 ~/.hermes/ 记忆） ──</span>
+rm -rf ~/.hermes/ ~/.local/share/hermes/
+<span class="hl-cmt"># 再重新运行安装脚本</span>`,
+    expand: {
+      title: '🔌 拓展：OpenAI CLI / Anthropic CLI 安装对比',
+      body: [
+        'OpenAI CLI (CLI 由 openai-api 提供): pip install openai → 依赖 Python + pip，由用户自行管理虚拟环境。API Key 通过 OPENAI_API_KEY 环境变量传递。',
+        'Anthropic CLI (claude CLI): npm install -g @anthropic-ai/claude-cli → 依赖 Node.js + npm。OAuth 或 API Key 同样通过环境变量或配置文件注入。',
+        'Hermes 的优势: 安装器一次性完成所有依赖（uv + Node.js + ripgrep + ffmpeg），用户无需手动配置 Python 环境。且 Hermes 统一抽象了多家 provider，无需为每个供应商安装单独 CLI。'
+      ]
+    },
+    quiz: [
+      { q: 'Hermes 安装器会自动安装 Python、Node.js、ripgrep 和 ffmpeg，无需用户手动安装。', ok: ['正确', '错误'], ans: 0,
+        explain: '安装器是一条 curl/PowerShell 脚本，它自动搭建隔离运行环境，用户不需要手动安装这些依赖。' },
+      { q: 'Windows 用户只能通过 WSL2 安装 Hermes，不支持原生 PowerShell。', ok: ['正确', '错误'], ans: 1,
+        explain: 'Windows 原生支持：iex (irm https://hermes-agent.nousresearch.com/install.ps1)。WSL2 是推荐但非必须的路径。' },
+      { q: 'hermes doctor 命令用于检查依赖、模型配置和工具链是否就绪。', ok: ['正确', '错误'], ans: 0,
+        explain: 'hermes doctor 是官方自检命令，检查全部依赖和配置，仅提示可忽略项即算通过。' }
+    ],
+    verifyList: [
+      '执行安装脚本且未报致命错误',
+      '重载 shell 后 hermes --version 正常输出版本号',
+      '运行 hermes doctor 自检通过（或仅提示可忽略项）',
+      '确认 hermes 二进制路径已加入当前 shell 的 PATH',
+      '查看 ~/.hermes/logs/ 目录，确认无持续报错'
+    ],
+    docs: [
+      { label: '官方安装文档', url: 'https://hermes-agent.nousresearch.com/docs/getting-started/installation' },
+      { label: '官方学习路径', url: 'https://hermes-agent.nousresearch.com/docs/getting-started/learning-path' },
+      { label: 'GitHub 仓库', url: 'https://github.com/NousResearch/hermes-agent' }
+    ]
+  },
+  {
+    id: 2,
+    num: '02',
+    title: 'Quickstart',
+    subtitle: '快速上手与首次对话',
+    knowledge: [
+      { title: '初始化流程', body: '首次运行 hermes 会启动模型配置向导（hermes model），提示选择 provider、OAuth 登录或粘贴 API Key。配置完成后，欢迎横幅显示当前模型、可用工具、已装 skill。' },
+      { title: '模型配置向导', body: '运行 hermes model 进入交互式向导：选择 provider 类型 → 完成 OAuth 登录 或 粘贴 API Key → 确认模型名称。向导将配置写入 ~/.hermes/config.yaml。' },
+      { title: 'TUI 与 CLI 两种界面', body: [
+        'hermes           — 经典 CLI 模式，纯文本交互',
+        'hermes --tui     — 现代 TUI（推荐），支持鼠标、覆盖层、快捷键、方向键滚动、Tab 切换面板',
+        'TUI 启动后显示欢迎横幅：模型名、工具列表、skill 列表、会话上下文长度'
+      ]}
+    ],
+    codeExample: `<span class="hl-cmt"># ── 交互式模型配置向导 ──</span>
+hermes model
+<span class="hl-cmt"># 选择 provider → OAuth 登录 或 输入 API Key → 选定模型</span>
+
+<span class="hl-cmt"># ── 一键登录（Nous Portal，覆盖 300+ 模型） ──</span>
+hermes setup --portal
+<span class="hl-cmt"># 自动登录并开启 Tool Gateway（网页搜索、图像、TTS）</span>
+
+<span class="hl-cmt"># ── 启动 TUI（推荐界面） ──</span>
+hermes --tui
+<span class="hl-cmt"># 欢迎横幅显示：模型、工具、skill、会话信息</span>
+
+<span class="hl-cmt"># ── 首次工具调用测试 prompt ──</span>
+<span class="hl-str">Summarize this repo in 5 bullets and tell me what the main entrypoint is.</span>
+<span class="hl-cmt"># 若模型判断需读文件，会看到 read_file / run_shell / search_web 调用记录</span>
+
+<span class="hl-cmt"># ── 会话管理 ──</span>
+hermes --continue          <span class="hl-cmt"># 或 hermes -c，恢复最近会话</span>
+hermes sessions            <span class="hl-cmt"># 列出所有会话</span>
+hermes --session &lt;id&gt;     <span class="hl-cmt"># 进入指定会话</span>
+hermes --new               <span class="hl-cmt"># 强制开启新会话</span>`,
+    expand: {
+      title: '🧠 拓展：大模型推理基本链路（Agent 工作原理）',
+      body: [
+        'Step 1 — Prompt 构建：系统提示（system prompt） + 用户输入 + 工具描述（tool schema） + 历史对话拼合成一个消息列表。',
+        'Step 2 — 模型推理：LLM 接收消息列表，基于工具描述判断是否需要调用工具。若需要，模型输出结构化的工具调用请求（tool_name + arguments）。',
+        'Step 3 — 工具执行：Hermes 解析模型输出，调用对应工具（read_file / run_shell / search_web 等），获取执行结果。',
+        'Step 4 — 结果汇总：工具返回的结果被包装成一条 tool_result 消息，送回模型。模型综合所有信息生成最终回答。',
+        '这一来一回可能多轮（模型可能调用多个工具、或对同一工具重试）。这就是 Agent 与普通聊天机器人的本质区别：Agent 能「动手」，而聊天机器人只能「回答」。'
+      ]
+    },
+    quiz: [
+      { q: '第一次跑通 Hermes 的标准是模型返回了任何回复。', ok: ['正确', '错误'], ans: 1,
+        explain: '标准是「它在需要时真的调用了工具，并且多轮对话不丢上下文」。不仅仅是回复。' },
+      { q: 'TUI 模式（hermes --tui）支持鼠标点击和覆盖层，是推荐界面。', ok: ['正确', '错误'], ans: 0,
+        explain: 'TUI 是现代推荐界面，支持鼠标、覆盖层、快捷键，能直接点击工具调用展开详情。' },
+      { q: 'hermes --continue 可以恢复上一次的对话会话。', ok: ['正确', '错误'], ans: 0,
+        explain: 'hermes --continue（或 hermes -c）恢复最近一次会话；hermes sessions 列出所有存档会话。' }
+    ],
+    verifyList: [
+      'hermes 或 hermes --tui 能启动并出现欢迎横幅',
+      '用一个具体 prompt 得到了正常回复',
+      '观察到 Hermes 在需要时调用了工具（终端 / 文件 / 搜索）',
+      'hermes --continue 能恢复上次会话',
+      '用 hermes sessions 列出并理解会话管理机制'
+    ],
+    docs: [
+      { label: '官方会话文档', url: 'https://hermes-agent.nousresearch.com/docs/getting-started/using-hermes' },
+      { label: '官方学习路径', url: 'https://hermes-agent.nousresearch.com/docs/getting-started/learning-path' },
+      { label: 'GitHub 仓库', url: 'https://github.com/NousResearch/hermes-agent' }
+    ]
+  },
+  {
+    id: 3,
+    num: '03',
+    title: 'Providers & Model Configuration',
+    subtitle: '模型配置四要素',
+    knowledge: [
+      { title: '四要素关系', body: [
+        'Provider（提供商）— 模型的来源：Nous Portal、Anthropic、OpenAI、OpenRouter、DeepSeek、自定义端点等。',
+        'Model（模型）— 具体的模型标识符：例如 claude-sonnet-4-20250514、gpt-4o、deepseek-chat、llama3.1:70b。',
+        'Base URL（基础接口地址）— API 请求的 endpoint。官方 provider 通常内置，自定义端点需显式指定（Ollama / vLLM / 私有部署）。',
+        'API Key（鉴权密钥）— 访问凭证。通过环境变量（ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY）或 config.yaml 中的 api_key 字段注入。'
+      ]},
+      { title: '配置方式对比', body: [
+        'Nous Portal:  hermes model → OAuth 登录。订阅覆盖 300+ 模型，附带 Tool Gateway（网页搜索、图像、TTS）。最省事的一站式方案。',
+        'Anthropic:     OAuth 或 ANTHROPIC_API_KEY。代码能力强，稳定，适合重代码任务。',
+        'OpenAI:       OPENAI_API_KEY。兼容 GPT-4o / GPT-4 Turbo 等，Tool Calling 支持完善。',
+        'OpenRouter:   OPENROUTER_API_KEY。聚合数百个模型，便于横向比较和切换。',
+        'DeepSeek:     DEEPSEEK_API_KEY。性价比高，适合预算敏感场景。',
+        '自定义端点:   hermes model → Custom endpoint。Ollama / vLLM / 私有 llama.cpp 部署。注意最低上下文 ≥64K token。'
+      ]},
+      { title: '最低上下文要求', body: 'Hermes 需要把系统提示、工具描述、历史记录、待办任务同时塞进上下文。因此本地模型（Ollama / llama.cpp）务必把上下文设到至少 64K token，否则 Hermes 可能拒绝启动或在长任务中崩溃。刚开始可用云端大模型把流程跑通，再切本地模型降成本。' }
+    ],
+    codeExample: `<span class="hl-cmt"># ── 交互式模型配置向导（所有 provider 通用） ──</span>
+hermes model
+
+<span class="hl-cmt"># ── 五种配置方式速览 ──</span>
+
+<span class="hl-kw"># 1. Nous Portal（一键登录 + Tool Gateway）</span>
+hermes setup --portal
+
+<span class="hl-kw"># 2. Anthropic（OAuth / API Key）</span>
+<span class="hl-cmt"># 在向导中选择 Anthropic，完成 OAuth 或输入 ANTHROPIC_API_KEY</span>
+
+<span class="hl-kw"># 3. OpenAI（API Key）</span>
+<span class="hl-cmt"># export OPENAI_API_KEY="sk-..."  或写入 config.yaml</span>
+
+<span class="hl-kw"># 4. DeepSeek（API Key）</span>
+<span class="hl-cmt"># export DEEPSEEK_API_KEY="sk-..."</span>
+
+<span class="hl-kw"># 5. 自定义端点（Ollama 示例）</span>
+<span class="hl-cmt"># config.yaml 中设置 base_url: http://localhost:11434</span>
+<span class="hl-cmt"># 模型名如 llama3.1:70b，上下文务必 ≥64K</span>
+
+<span class="hl-cmt">── config.yaml 片段 ──</span>
+<span class="hl-kw">model:</span>
+  <span class="hl-prop">provider:</span> openai
+  <span class="hl-prop">model:</span> gpt-4o
+  <span class="hl-prop">api_key:</span> ${OPENAI_API_KEY}
+
+<span class="hl-kw">model:</span>
+  <span class="hl-prop">provider:</span> ollama
+  <span class="hl-prop">model:</span> llama3.1:70b
+  <span class="hl-prop">base_url:</span> http://localhost:11434`,
+    expand: {
+      title: '🔌 拓展：OpenAI 兼容接口标准与 Tool Calling 支持差异',
+      body: [
+        'OpenAI Compatible API：自 OpenAI 发布 API 标准后，众多厂商（Ollama、vLLM、DeepSeek、Mistral、百度千帅等）都提供兼容 OpenAI 请求格式的 endpoint。Hermes 的自定义端点正是利用了这一标准 —— 通过 base_url + API Key 即可接入。',
+        'Tool Calling / Function Calling 支持度（2025 年中）：',
+        '  • OpenAI (GPT-4o / GPT-4 Turbo): 最早的 Function Calling 标准，支持多工具并行调用，工具结果处理成熟。',
+        '  • Anthropic (Claude 3.5/4): Tool Use 方式与 OpenAI 类似但消息格式略有不同，Claude 对长上下文和复杂工具链的理解表现优秀。',
+        '  • Gemini (Google): Function Calling 支持，但工具描述格式和返回约定与 OpenAI 存在差异，需注意适配。',
+        '  • DeepSeek / 开源模型（通过 OpenRouter / 自定义端点）: 大部分支持 OpenAI 兼容的 function calling，但具体工具选择的可靠性因模型而异。',
+        '  • 本地模型（Ollama / llama.cpp）: 依赖模型本身的工具调用能力。部分模型（如 Hermes-nomic、某些微调 Qwen）支持较好，但 64K 上下文是硬性要求。'
+      ]
+    },
+    quiz: [
+      { q: 'Provider / Model / Base URL / API Key 是 Hermes 模型配置的四个核心要素。', ok: ['正确', '错误'], ans: 0,
+        explain: '这四要素分别定义了「去哪里调、调什么模型、接口在哪、用什么密钥」，是配置的最小完备集合。' },
+      { q: '本地模型（Ollama）运行 Hermes 时上下文至少需要 64K token。', ok: ['正确', '错误'], ans: 0,
+        explain: 'Hermes 要把系统提示 + 工具描述 + 历史 + 待办塞进上下文，本地模型务必设 ≥64K，否则可能崩溃或拒绝启动。' },
+      { q: 'Nous Portal 是订阅覆盖 300+ 模型并附带 Tool Gateway 的一站式方案。', ok: ['正确', '错误'], ans: 0,
+        explain: 'Nous Portal 通过 hermes setup --portal 一键登录，覆盖 300+ 模型，且附带网页搜索、图像、TTS 等 Tool Gateway。' }
+    ],
+    verifyList: [
+      '跑过 hermes model 交互式向导并选定 Provider',
+      '能正常对话（说明模型与鉴权已通）',
+      '本地 / Ollama 模型已把上下文设到 ≥64K',
+      '对应 API Key 已写入环境变量或 config.yaml',
+      '确认所用模型的定价与上下文上限适合自己场景'
+    ],
+    docs: [
+      { label: '官方模型配置', url: 'https://hermes-agent.nousresearch.com/docs/integrations/providers' },
+      { label: '官方学习路径', url: 'https://hermes-agent.nousresearch.com/docs/getting-started/learning-path' },
+      { label: 'GitHub 仓库', url: 'https://github.com/NousResearch/hermes-agent' }
+    ]
+  },
+  {
+    id: 4,
+    num: '04',
+    title: 'CLI 常用命令',
+    subtitle: '斜杠命令与会话管理',
+    knowledge: [
+      { title: '斜杠命令体系', body: 'Hermes TUI/CLI 中以 / 开头的命令用于控制会话行为和查询状态，不经过模型推理，直接由 Hermes 解析执行。常用命令：' },
+      { title: '会话管理机制', body: [
+        '每次 hermes 启动创建一个新会话（除非使用 --continue / --session）。',
+        '会话记录保存在 ~/.hermes/sessions/，包含完整对话历史、工具调用记录。',
+        'hermes sessions 列出所有存档会话，hermes --session <id> 跳转指定会话。',
+        'hermes --continue（或 -c）恢复最近一次会话，适合断点续谈。'
+      ]}
+    ],
+    codeExample: `<span class="hl-cmt">── 核心斜杠命令 ──</span>
+
+<span class="hl-kw">/help</span>          显示所有可用命令与快捷键
+<span class="hl-kw">/model</span>         查看或切换当前模型
+<span class="hl-kw">/tools</span>         列出当前可调用的工具（内置 + MCP）
+<span class="hl-kw">/status</span>        显示会话状态：模型、工具数、上下文长度、内存占用
+<span class="hl-kw">/context</span>       查看当前上下文内容摘要（系统提示、历史、待办）
+<span class="hl-kw">/skills</span>        列出已安装技能；/skills create &lt;name&gt; 手动创建空技能
+<span class="hl-kw">/skills browse</span> 浏览全部可用技能
+<span class="hl-kw">&lt;skill_name&gt;</span> 直接调用技能（例如 /git-commit-helper）
+
+<span class="hl-cmt">── 会话管理命令（终端中运行） ──</span>
+
+hermes               <span class="hl-cmt"># 启动新会话（经典 CLI）</span>
+hermes --tui         <span class="hl-cmt"># 启动新会话（TUI，推荐）</span>
+hermes --continue    <span class="hl-cmt"># 或 hermes -c，恢复最近会话</span>
+hermes sessions      <span class="hl-cmt"># 列出所有存档会话</span>
+hermes --session &lt;id&gt;  <span class="hl-cmt"># 跳转进入指定会话</span>
+hermes --new         <span class="hl-cmt"># 强制开启新会话（忽略最近会话）</span>`,
+    expand: {
+      title: '🔌 拓展：OpenAI / Anthropic 官方 CLI 的命令模式对比',
+      body: [
+        'OpenAI CLI（基于 openai Python 库或官方 CLI 工具）：',
+        '  • 命令模式：通常为一次性请求/响应模型。用户发送 prompt，获得回复后会话结束。多轮对话需自行维护消息历史。',
+        '  • 会话管理：不提供内置会话存档。开发者需自行实现消息存储以支持多轮对话。',
+        '',
+        'Anthropic CLI（claude CLI）：',
+        '  • 命令模式：交互式对话，支持多轮，上下文自动累积。提供 /clear 清空上下文、/help 查命令等。',
+        '  • 会话管理：可以保存和恢复对话，但功能相对简陋，不支持工具调用历史的细粒度审查。',
+        '',
+        'Hermes 的优势：斜杠命令丰富（/model /tools /status /context /skills），且天然支持工具调用历史、会话存档、cross-session 记忆。对排错和复杂任务非常实用。'
+      ]
+    },
+    quiz: [
+      { q: '/help 命令用于显示所有可用斜杠命令与快捷键。', ok: ['正确', '错误'], ans: 0,
+        explain: '/help 是 Hermes 的内置命令，直接由 Hermes 解析，显示所有可用命令及快捷键，无需模型推理。' },
+      { q: 'hermes sessions 用于列出所有存档的会话。', ok: ['正确', '错误'], ans: 0,
+        explain: 'hermes sessions 列出 ~/.hermes/sessions/ 中的所有存档会话。配合 hermes --session <id> 可跳转。' },
+      { q: '斜杠命令（如 /model、/tools）会发送给模型进行推理后再执行。', ok: ['正确', '错误'], ans: 1,
+        explain: '斜杠命令由 Hermes 直接解析执行，不经过模型推理。这是 CLI 控制指令，与普通 prompt 的关键区别。' }
+    ],
+    verifyList: [
+      '熟悉并能使用 /help 查看命令列表',
+      '使用 /model 查看或切换当前模型',
+      '使用 /tools 列出可调用工具',
+      '使用 /status 查看会话状态',
+      '掌握 hermes sessions / hermes --continue / hermes --session <id> 会话管理'
+    ],
+    docs: [
+      { label: '官方 CLI 使用指南', url: 'https://hermes-agent.nousresearch.com/docs/zh-Hans/user-guide/cli' },
+      { label: '官方学习路径', url: 'https://hermes-agent.nousresearch.com/docs/getting-started/learning-path' }
+    ]
+  },
+  {
+    id: 5,
+    num: '05',
+    title: 'Configuration',
+    subtitle: '配置文件与密钥管理',
+    knowledge: [
+      { title: '~/.hermes 目录结构', body: [
+        '~/.hermes/                    — Hermes 主配置目录',
+        '  config.yaml                 — 普通配置（模型、provider、MCP 服务器、connector）',
+        '  .env                        — 密钥配置（API Key 等敏感信息，gitignore 保护）',
+        '  memories/                   — 记忆文件（USER.md, MEMORY.md, sessions/）',
+        '  skills/                     — 用户安装的技能目录',
+        '  logs/                       — 运行日志，排错时查看',
+        '  sessions/                   — 会话存档'
+      ]},
+      { title: 'config.yaml 普通配置', body: 'config.yaml 存放非敏感配置：模型选择、provider 设置、MCP 服务器定义、connector 配置、技能路径等。使用 YAML 语法，缩进必须为两个空格。' },
+      { title: '.env 密钥配置的区别', body: 'API Key 等敏感信息不应明文写在 config.yaml 中。推荐使用 .env 文件或环境变量，并在 config.yaml 中用 ${VAR_NAME} 语法引用。这样密钥与配置分离，便于 gitignore 保护、方便在不同环境间切换。' }
+    ],
+    codeExample: `<span class="hl-cmt">── ~/.hermes/config.yaml 示例 ──</span>
+
+<span class="hl-kw">model:</span>
+  <span class="hl-prop">provider:</span> openai
+  <span class="hl-prop">model:</span> gpt-4o
+  <span class="hl-prop">api_key:</span> ${OPENAI_API_KEY}
+
+<span class="hl-kw">mcp_servers:</span>
+  <span class="hl-prop">filesystem:</span>
+    <span class="hl-prop">command:</span> npx
+    <span class="hl-prop">args:</span> [<span class="hl-str">"-y"</span>, <span class="hl-str">"@modelcontextprotocol/server-filesystem"</span>, <span class="hl-str">"/home/user/projects"</span>]
+  <span class="hl-prop">fetch:</span>
+    <span class="hl-prop">command:</span> uvx
+    <span class="hl-prop">args:</span> [<span class="hl-str">"mcp-server-fetch"</span>]
+  <span class="hl-prop">sqlite:</span>
+    <span class="hl-prop">command:</span> uvx
+    <span class="hl-prop">args:</span> [<span class="hl-str">"mcp-server-sqlite"</span>, <span class="hl-str">"--db-path"</span>, <span class="hl-str">"/home/user/notes.db"</span>]
+
+<span class="hl-kw">connectors:</span>
+  <span class="hl-prop">telegram:</span>
+    <span class="hl-prop">bot_token:</span> ${TELEGRAM_BOT_TOKEN}
+    <span class="hl-prop">allowed_users:</span>
+      - user1
+      - user2
+
+<span class="hl-cmt">── ~/.hermes/.env 示例（不提交到 git） ──</span>
+
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+DEEPSEEK_API_KEY=sk-...
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+
+<span class="hl-cmt">── 环境变量在 shell 中的设置 ──</span>
+
+<span class="hl-kw">export</span> OPENAI_API_KEY=<span class="hl-str">"sk-..."</span>   <span class="hl-cmt"># Linux/macOS/WSL</span>
+<span class="hl-kw">$</span> <span class="hl-fn">env:</span>OPENAI_API_KEY = <span class="hl-str">"sk-..."</span>     <span class="hl-cmt"># PowerShell</span>`,
+    expand: {
+      title: '🔒 拓展：配置与密钥分离的安全最佳实践',
+      body: [
+        '1. 永远不要将 API Key 明文提交到代码仓库。将 .env 添加到 .gitignore，config.yaml 中只保留 ${VAR} 引用。',
+        '2. 使用环境变量注入：在 CI/CD、Docker、devcontainer 中通过环境变量传递密钥，而非配置文件。',
+        '3. 文件权限保护：.env 文件权限设为 600（仅所有者可读写）。在 Linux/macOS 上 chmod 600 ~/.hermes/.env。',
+        '4. OAuth 优先于 API Key：对于支持 OAuth 的 provider（Nous Portal、Anthropic），优先使用 OAuth 登录，避免长期密钥泄露风险。',
+        '5. 最小权限原则：connector 配置中一定要设置 allowed_users 白名单。绝不要把 MCP filesystem 服务器指向 ~/.ssh 或根目录。',
+        '6. 定期轮换密钥：为每个环境创建独立密钥，定期更换。若怀疑泄露，立即在提供商控制台吊销并生成新密钥。',
+        '7. 日志脱敏：确认 ~.hermes/logs/ 中的日志不包含密钥明文。如有疑虑，检查日志并配置对应的日志过滤。'
+      ]
+    },
+    quiz: [
+      { q: 'config.yaml 中可以使用 ${OPENAI_API_KEY} 语法引用环境变量中的密钥。', ok: ['正确', '错误'], ans: 0,
+        explain: 'Hermes 支持在 config.yaml 中用 ${VAR_NAME} 语法引用环境变量，这是配置与密钥分离的标准做法。' },
+      { q: '.env 文件应当被添加到 .gitignore 以防止密钥泄露到代码仓库。', ok: ['正确', '错误'], ans: 0,
+        explain: '.env 包含敏感密钥，必须 gitignore。密钥泄露到公开仓库是严重安全事故，可能导致费用损失或数据泄露。' },
+      { q: 'MCP filesystem 服务器可以安全地指向根目录 /，以方便访问所有文件。', ok: ['正确', '错误'], ans: 1,
+        explain: '绝不要把 MCP filesystem 服务器指向根目录或 ~/.ssh。只给它需要访问的特定项目目录，遵循最小权限原则。' }
+    ],
+    verifyList: [
+      '了解 ~/.hermes/ 的目录结构及各子目录用途',
+      '能在 config.yaml 中正确配置模型 provider、MCP 服务器',
+      '掌握 ${VAR} 语法在 config.yaml 中引用环境变量',
+      '将 .env 添加到 .gitignore，理解密钥与配置分离的意义',
+      '理解 connector allowed_users 白名单的安全必要性'
+    ],
+    docs: [
+      { label: '官方配置说明', url: 'https://hermes-agent.nousresearch.com/docs/zh-Hans/user-guide/configuration' },
+      { label: '官方学习路径', url: 'https://hermes-agent.nousresearch.com/docs/getting-started/learning-path' }
+    ]
+  },
+  {
+    id: 6,
+    num: '06',
+    title: 'Tools',
+    subtitle: '工具调用与 Agent 核心能力',
+    knowledge: [
+      { title: 'Tool Calling 原理', body: 'Tool Calling（亦称 Function Calling）是 LLM 接收工具描述（名称、参数 schema、描述文字）后，判断是否需要调用外部工具，并输出结构化的工具调用请求的能力。Hermes 负责解析模型输出、执行工具、将结果返回模型，模型最终组织成自然语言回答。' },
+      { title: 'Hermes 内置工具', body: [
+        'read_file / read_text_file — 读取本地文件内容，支持多种格式',
+        'write_file / write_text_file — 向本地写入文件，可创建新文件或覆盖',
+        'run_shell / run_terminal — 在本地 shell 执行命令，返回 stdout/stderr',
+        'search_web — 通过 Tool Gateway 或自定义搜索引擎搜索网络',
+        'browse / browser — 启动浏览器访问页面、截图、提取 DOM 内容',
+        'edit_file — 对现有文件进行局部编辑（删改指定行区间）',
+        '其他：TTS (语音合唱)、图像生成、代码执行等，取决于所接入的 Tool Gateway'
+      ]},
+      { title: '完整实操案例', body: '以「读取项目 README、统计代码行数、生成总结报告」为例：模型先调用 read_file 读取 README → 调用 run_shell 执行 wc -l 和 rg 统计 → 将结果汇总输出为 write_file 写入 report.md。全程由模型自主决策工具调用顺序。' }
+    ],
+    codeExample: `<span class="hl-cmt">── 实操案例：读取 + 统计 + 生成报告 ──</span>
+
+<span class="hl-cmt">用户 prompt（在 hermes --tui 中输入）：</span>
+<span class="hl-str">读取当前项目的 README.md，统计所有 Python 文件的代码行数，</span>
+<span class="hl-str">并将结果写入 report.md。</span>
+
+<span class="hl-cmt">模型自主决定调用以下工具（终端中可见调用记录）：</span>
+
+<span class="hl-kw">1. read_file</span>(<span class="hl-prop">path:</span> <span class="hl-str">"README.md"</span>)
+<span class="hl-cmt">   → 返回 README 内容</span>
+
+<span class="hl-kw">2. run_shell</span>(<span class="hl-prop">command:</span> <span class="hl-str">"find . -name '*.py' -exec wc -l {} + | tail -1"</span>)
+<span class="hl-cmt">   → 返回 Python 文件总行数</span>
+
+<span class="hl-kw">3. write_file</span>(<span class="hl-prop">path:</span> <span class="hl-str">"report.md"</span>, <span class="hl-prop">content:</span> <span class="hl-str">"## 项目总结\n- README: ...\n- Python 总行数: 1234\n"</span>)
+<span class="hl-cmt">   → report.md 创建成功</span>
+
+<span class="hl-cmt">── 查看已安装工具 ──</span>
+/tools
+<span class="hl-cmt"># 列出所有可用工具（内置 + MCP 提供的）</span>
+
+<span class="hl-cmt">── 对比：OpenAI Function Calling 官方标准（curl 示例） ──</span>
+
+curl https://api.openai.com/v1/chat/completions \\
+  -H <span class="hl-str">"Authorization: Bearer $OPENAI_API_KEY"</span> \\
+  -H <span class="hl-str">"Content-Type: application/json"</span> \\
+  -d <span class="hl-str">'{
+    "model": "gpt-4o",
+    "messages": [{
+      "role": "user",
+      "content": "What is the current weather in San Francisco?"
+    }],
+    "tools": [{
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get current weather in a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {"type": "string"}
+          },
+          "required": ["city"]
+        }
+      }
+    }]
+  }'</span>
+
+<span class="hl-cmt"># OpenAI 返回工具调用请求，开发者执行后再将结果送回模型。</span>
+
+<span class="hl-cmt">── 对比：Anthropic Tool Use（curl 示例） ──</span>
+
+curl https://api.anthropic.com/v1/messages \\
+  -H <span class="hl-str">"x-api-key: $ANTHROPIC_API_KEY"</span> \\
+  -H <span class="hl-str">"Content-Type: application/json"</span> \\
+  -H <span class="hl-str">"anthropic-version: 2023-06-01"</span> \\
+  -d <span class="hl-str">'{
+    "model": "claude-sonnet-4-20250514",
+    "max_tokens": 1024,
+    "tools": [{
+      "name": "get_weather",
+      "description": "Get current weather in a city",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "city": {"type": "string"}
+        },
+        "required": ["city"]
+      }
+    }],
+    "messages": [{
+      "role": "user",
+      "content": "What is the current weather in San Francisco?"
+    }]
+  }'</span>
+
+<span class="hl-cmt"># Anthropic 返回 tool_use 块，开发者执行后以 tool_result 块送回。</span>`,
+    expand: {
+      title: '🔌 拓展：OpenAI Function Calling / Anthropic Tool Use 官方标准对比',
+      body: [
+        '概述：两者都允许 LLM 调用外部工具，但消息格式、工具描述方式、返回结构有差异。Hermes 统一抽象了这些差异，开发者只需在 config.yaml 中配置 provider，无需关心底层协议。',
+        '',
+        'OpenAI Function Calling:',
+        '  • 工具描述放在 messages 之外的 tools 数组中。每个工具有 type: "function"、function.name、function.description、function.parameters（JSON Schema）。',
+        '  • 模型返回 finish_reason: "tool_calls"，content 中包含 tool_call 对象列表（index、id、type、function.name、function.arguments JSON）。',
+        '  • 开发者解析 arguments、执行函数、构造 tool_message 送回。支持多工具并行调用。',
+        '',
+        'Anthropic Tool Use:',
+        '  • 工具描述直接放在 tools 数组中（name、description、input_schema，输入 schema 为 JSON Schema）。',
+        '  • 模型返回 content 块类型为 "tool_use"，包含 id、type、name、input（工具参数对象）。',
+        '  • 开发者执行后构造 type: "tool_result" 的 content 块送回， optionally 带有 name 和 content（结果文本）或 is_error 标志。',
+        '',
+        '其他厂商（Gemini / DeepSeek / 本地模型）大体兼容 OpenAI 的 function calling 格式，但细节（如工具结果格式、多工具选择行为）可能略有不同。Hermes 的工具抽象层正是为了屏蔽这些差异。'
+      ]
+    },
+    quiz: [
+      { q: 'Tool Calling 是 LLM 根据工具描述判断是否调用外部工具，并输出结构化调用请求的能力。', ok: ['正确', '错误'], ans: 0,
+        explain: 'Tool Calling / Function Calling 的定义正是如此。Hermes 负责解析、执行、回送结果，模型最终组织回答。' },
+      { q: 'Hermes 内置的 read_file / run_shell / write_file 是 Agent 能够「动手」完成任务的核心工具。', ok: ['正确', '错误'], ans: 0,
+        explain: '这些内置工具让 Hermes 能读写文件、执行终端命令，是 Agent 与普通聊天机器人的关键区别。' },
+      { q: 'OpenAI 和 Anthropic 的 Tool Calling / Tool Use 协议完全相同，无需任何适配。', ok: ['正确', '错误'], ans: 1,
+        explain: '两者在消息格式、工具描述方式、返回结构上都有差异。Hermes 的工具抽象层屏蔽了这些差异，开发者无需手动适配。' }
+    ],
+    verifyList: [
+      '理解 Tool Calling / Function Calling 的基本原理（工具描述 → 模型判断 → 调用请求 → 执行 → 结果汇总）',
+      '掌握 Hermes 内置工具：read_file、write_file、run_shell、search_web、/tools 列表查看',
+      '完成一次完整工具调用实操：读取文件 + 执行 shell 命令 + 生成结果文件',
+      '了解 OpenAI Function Calling 与 Anthropic Tool Use 的协议差异',
+      '理解 Hermes 的工具抽象层如何屏蔽不同 provider 的协议差异'
+    ],
+    docs: [
+      { label: '官方工具调用文档', url: 'https://hermes-agent.nousresearch.com/docs/zh-Hans/user-guide/features/tools' },
+      { label: '官方学习路径', url: 'https://hermes-agent.nousresearch.com/docs/getting-started/learning-path' },
+      { label: 'OpenAI Function Calling 官方文档', url: 'https://platform.openai.com/docs/guides/function-calling' },
+      { label: 'Anthropic Tool Use 官方文档', url: 'https://docs.anthropic.com/en/docs/build-with-claude/tool-use' }
+    ]
+  }
+];
+
+/* ═══════════════════════════════════════════════════════
+   localStorage 进度存储
+   ═══════════════════════════════════════════════════════ */
+const LS_KEY = 'hermes-agent-6steps-progress';
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return { completed: {}, quizAns: {} };
+    const data = JSON.parse(raw);
+    return {
+      completed: data.completed || {},
+      quizAns: data.quizAns || {}
+    };
+  } catch { return { completed: {}, quizAns: {} }; }
+}
+function saveProgress(completed, quizAns) {
+  localStorage.setItem(LS_KEY, JSON.stringify({ completed, quizAns }));
+}
+
+/* ═══════════════════════════════════════════════════════
+   渲染函数
+   ═══════════════════════════════════════════════════════ */
+const progressFill = document.getElementById('progress-fill');
+const progressPct  = document.getElementById('progress-pct');
+const levelNav     = document.getElementById('level-nav');
+const stagesCtr    = document.getElementById('stages-container');
+const refList      = document.getElementById('ref-list');
+const toastEl      = document.getElementById('toast');
+
+let currentStage = 1;
+let progress = loadProgress();
+
+function renderRefList() {
+  const seen = new Set();
+  const items = [];
+  for (const s of STAGES) {
+    for (const d of s.docs) {
+      if (!seen.has(d.url)) {
+        seen.add(d.url);
+        items.push(d);
+      }
+    }
+  }
+  refList.innerHTML = items.map(d =>
+    `<a class="ref-link" href="${d.url}" target="_blank" rel="noopener">📄 ${d.label}</a>`
+  ).join('');
+}
+
+function renderLevelNav() {
+  levelNav.innerHTML = STAGES.map((s, idx) => {
+    const isLocked = idx > 0 && !progress.completed[STAGES[idx-1].id];
+    const isDone   = !!progress.completed[s.id];
+    const isActive = s.id === currentStage;
+    return `<button class="level-btn ${isActive?'active':''} ${isDone?'done':''} ${isLocked?'locked':''}"
+            data-stage="${s.id}" ${isLocked?'disabled':''}>
+            <span class="num">${s.num}</span>
+            ${s.title}
+            <span class="badge">${isDone?'✓已完成':(isLocked?'🔒':s.id===currentStage?'●当前':'');}</span>
+          </button>`;
+  }).join('');
+  levelNav.querySelectorAll('.level-btn:not(.locked)').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.stage);
+      if (id !== currentStage) switchStage(id);
+    });
+  });
+}
+
+function renderStageContent(stage) {
+  // 找到 stage 数据
+  const s = STAGES.find(st => st.id === stage.id);
+  if (!s) return;
+
+  // 构建知识点 HTML
+  let knowledgeHtml = s.knowledge.map(k => {
+    if (Array.isArray(k.body)) {
+      return `<div class="card">
+        <h3>${k.title}</h3>
+        <ul>${k.body.map(b => `<li>${b}</li>`).join('')}</ul>
+      </div>`;
+    }
+    return `<div class="card">
+      <h3>${k.title}</h3>
+      <p>${k.body}</p>
+    </div>`;
+  }).join('');
+
+  // 代码块 HTML
+  const codeHtml = s.codeExample;
+
+  // 拓展卡片
+  const expandHtml = s.expand ? `
+    <div class="expand-card">
+      <h4>${s.expand.title}</h4>
+      ${Array.isArray(s.expand.body) ? s.expand.body.map(b => `<p>${b}</p>`).join('') : `<p>${s.expand.body}</p>`}
+    </div>` : '';
+
+  // 判断题
+  let quizHtml = `<div class="quiz" id="quiz-area">`;
+  s.quiz.forEach((q, qi) => {
+    const ans = progress.quizAns[stage.id]?.[qi];
+    const isCorrect = ans === q.ans;
+    quizHtml += `
+      <div class="quiz-item" data-qi="${qi}">
+        <div class="quiz-q">${qi+1}. ${q.q}</div>
+        <div class="quiz-opts">
+          ${q.ok.map((opt, oi) => {
+            let cls = '';
+            if (ans === oi) cls = 'selected';
+            if (isCorrect && ans === q.ans && oi === q.ans) cls = 'correct';
+            if (isCorrect && ans !== q.ans && oi === ans) cls = 'wrong';
+            return `<button class="quiz-opt ${cls}" data-qi="${qi}" data-oi="${oi}">${opt}</button>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="quiz-feedback ${isCorrect?'correct':(ans===undefined?'':'wrong')}" id="quiz-fb-${qi}">
+        ${ans===undefined ? '' : (isCorrect ? '✓ ' + q.explain : '✗ ' + q.explain)}
+      </div>`;
+  });
+  quizHtml += `</div>`;
+
+  // 验收清单
+  const verifyHtml = s.verifyList.map((v, vi) => `
+    <label class="flex items-start gap-2 cursor-pointer group" style="padding:3px 0;color:var(--text-2);font-size:14px;">
+      <input type="checkbox" data-vi="${vi}" ${progress.completed[stage.id]?.verify?.[vi]?'checked':''} class="mt-0.5 accent-[var(--accent)]">
+      <span>${v}</span>
+    </label>`).join('');
+
+  // 完成按钮状态
+  const allChecked = s.verifyList.every((_, vi) => progress.completed[stage.id]?.verify?.[vi]);
+  const stageDone = !!progress.completed[stage.id]?.done;
+  const isLastUnlocked = stage.id === 1 || progress.completed[stage.id-1]?.done;
+
+  const doneBtnHtml = `
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+      <button class="done-btn ${stageDone?'done':''}" id="done-btn" ${!isLastUnlocked && !stageDone?'disabled':''}>
+        ${stageDone ? '✓ 本关已完成' : (isLastUnlocked ? '✓ 勾选完成，解锁下一关' : '完成勾选后解锁下一关')}
+      </button>
+      <span style="font-size:12px;color:var(--text-3);">
+        验收 ${progress.completed[stage.id]?.verify?countChecked(progress.completed[stage.id].verify):0} / ${s.verifyList.length}
+        ${stageDone ? '· 已解锁' : ''}
+      </span>
+    </div>`;
+
+  // 底部 docs
+  const docsHtml = s.docs.map(d =>
+    `<a class="ref-link" href="${d.url}" target="_blank" rel="noopener" style="margin-top:6px;display:inline-flex;">📄 ${d.label} →</a>`
+  ).join('');
+
+  // 填充容器
+  stagesCtr.innerHTML = STAGES.map((st, idx) => {
+    const isActive = st.id === stage.id;
+    const isLocked = idx > 0 && !progress.completed[STAGES[idx-1].id];
+    return `<div class="stage-panel ${isActive?'active':''}" data-stage="${st.id}" style="${isLocked && isActive ? 'display:none;' : ''}">
+      <div class="stage-header">
+        <span class="stage-num">${st.num}</span>
+        <span class="stage-title">${st.title}</span>
+        <span class="stage-sub">${st.subtitle}${isLocked && !isActive ? ' · '+st.lockNote : ''}</span>
+      </div>
+
+      <div style="display:grid;gap:12px;">
+        ${knowledgeHtml}
+        <div class="card">
+          <h3>💻 代码示例</h3>
+          <div class="code-block">
+            <button class="copy-btn" data-code="${encodeURIComponent(st.codeExample)}">📋 复制</button>
+            <pre>${st.codeExample}</pre>
+          </div>
+        </div>
+        ${expandHtml}
+        ${quizHtml}
+        <div class="card">
+          <h3>✅ 验收清单</h3>
+          <div style="display:flex;flex-direction:column;gap:4px;">${verifyHtml}</div>
+        </div>
+        ${doneBtnHtml}
+        <div style="margin-top:8px;">
+          <h3 style="font-size:13px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">📚 本关参考文档</h3>
+          ${docsHtml}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // 绑定当前面板的交互
+  bindStageEvents(stage.id);
+}
+
+function countChecked(verify) {
+  return Object.values(verify).filter(Boolean).length;
+}
+
+function updateProgress() {
+  const total = STAGES.length;
+  const done = STAGES.filter(s => progress.completed[s.id]?.done).length;
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  progressFill.style.width = pct + '%';
+  progressPct.textContent = pct + '%';
+
+  // 更新导航按钮状态
+  renderLevelNav();
+}
+
+function switchStage(id) {
+  currentStage = id;
+  // 淡出当前 → 淡入新
+  const oldPanel = stagesCtr.querySelector('.stage-panel.active');
+  if (oldPanel) {
+    oldPanel.style.transition = 'opacity 0.2s, transform 0.2s';
+    oldPanel.style.opacity = '0';
+    oldPanel.style.transform = 'translateY(8px)';
+    setTimeout(() => {
+      oldPanel.classList.remove('active');
+      oldPanel.style.opacity = '';
+      oldPanel.style.transform = '';
+      renderStageContent(STAGES.find(s => s.id === id));
+    }, 200);
+  } else {
+    renderStageContent(STAGES.find(s => s.id === id));
+  }
+  updateProgress();
+}
+
+function showToast(msg, duration = 2000) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastEl._timer);
+  toastEl._timer = setTimeout(() => toastEl.classList.remove('show'), duration);
+}
+
+function bindStageEvents(stageId) {
+  const s = STAGES.find(st => st.id === stageId);
+
+  // ── 判断题选项点击 ──
+  document.querySelectorAll('.quiz-opt').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const qi = parseInt(btn.dataset.qi);
+      const oi = parseInt(btn.dataset.oi);
+      const q = s.quiz[qi];
+      if (!q) return;
+
+      // 更新 quizAns
+      if (!progress.quizAns[stageId]) progress.quizAns[stageId] = {};
+      progress.quizAns[stageId][qi] = oi;
+      saveProgress(progress.completed, progress.quizAns);
+
+      // 重新渲染该判断题组的状态
+      renderStageContent(STAGES.find(st => st.id === stageId));
+      showToast(q.ans === oi ? '✓ 回答正确' : '✗ 回答错误，再想想~', 1500);
+    });
+  });
+
+  // ── 验收勾选框 ──
+  document.querySelectorAll('.quiz-area + .card input[type=checkbox], .card input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const vi = parseInt(cb.dataset.vi);
+      if (isNaN(vi)) return;
+      if (!progress.completed[stageId]) progress.completed[stageId] = { verify: {}, done: false };
+      if (!progress.completed[stageId].verify) progress.completed[stageId].verify = {};
+      progress.completed[stageId].verify[vi] = cb.checked;
+      saveProgress(progress.completed, progress.quizAns);
+      renderStageContent(STAGES.find(st => st.id === stageId));
+    });
+  });
+
+  // ── 复制按钮 ──
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = decodeURIComponent(btn.dataset.code);
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = '✓ 已复制';
+        btn.classList.add('copied');
+        showToast('✨ 代码已复制到剪贴板', 1500);
+        setTimeout(() => {
+          btn.textContent = '📋 复制';
+          btn.classList.remove('copied');
+        }, 2000);
+      }).catch(() => {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = code;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        btn.textContent = '✓ 已复制';
+        btn.classList.add('copied');
+        showToast('✨ 代码已复制到剪贴板', 1500);
+        setTimeout(() => {
+          btn.textContent = '📋 复制';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    });
+  });
+
+  // ── 完成按钮 ──
+  const doneBtn = document.getElementById('done-btn');
+  if (doneBtn) {
+    doneBtn.addEventListener('click', () => {
+      if (progress.completed[stageId]?.done) {
+        showToast('✓ 该关卡已完成', 1500);
+        return;
+      }
+      // 检查是否全选
+      const allChecked = s.verifyList.every((_, vi) => progress.completed[stageId]?.verify?.[vi]);
+      if (!allChecked) {
+        showToast('⚠️ 请先完成所有验收项的勾选', 2000);
+        return;
+      }
+      // 标记完成
+      if (!progress.completed[stageId]) progress.completed[stageId] = { verify: {}, done: false };
+      progress.completed[stageId].done = true;
+      saveProgress(progress.completed, progress.quizAns);
+      renderStageContent(STAGES.find(st => st.id === stageId));
+      updateProgress();
+      showToast(`🎉 第 ${s.num} 关「${s.title}」完成！下一关已解锁`, 2500);
+    });
+  }
+}
+
+/* ═══════════════════════════════════════════
+   初始化
+   ═══════════════════════════════════════════ */
+renderRefList();
+renderLevelNav();
+renderStageContent(STAGES[0]);
+updateProgress();
+
+// 键盘快捷键：左右箭头切换关卡
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    const idx = STAGES.findIndex(s => s.id === currentStage);
+    if (idx < STAGES.length - 1) {
+      const next = STAGES[idx + 1];
+      if (!progress.completed[next.id - 1]?.done && next.id > 1) return; // 前一关未完成则不跳
+      switchStage(next.id);
+    }
+    e.preventDefault();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    const idx = STAGES.findIndex(s => s.id === currentStage);
+    if (idx > 0) {
+      switchStage(STAGES[idx - 1].id);
+    }
+    e.preventDefault();
+  }
+});
+
+console.log('✨ Hermes Agent 六步闯关学习页已加载');
+console.log(`📊 当前进度: ${progressFill.style.width || '0%'}`);
+console.log(`💾 localStorage 键: ${LS_KEY}`);
+</script>
+</body>
+</html>
