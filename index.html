@@ -534,21 +534,27 @@ const STAGES = [
     subtitle: '安装 Hermes Agent',
     lockNote: '完成上一关后解锁',
     knowledge: [
-      { title: '安装器原理', body: 'Hermes 安装器是一个自解压脚本（curl / PowerShell），它自动完成以下工作：创建隔离的 Python 虚拟环境、安装 uv 包管理器、部署 Node.js（Playwright）、拉取 ripgrep 和 ffmpeg 到系统 PATH。用户无需手动安装任何运行时依赖。' },
+      { title: '安装器原理', body: 'Hermes 安装器是一个自解压脚本（curl / PowerShell），它自动完成以下 5 件事：① 安装 uv（高速 Python 包管理器，位于 %USERPROFILE%\\.local\\bin 或 ~/.local/bin）；② 安装 Python 3.11+（通过 uv，无需用户预先安装）；③ 安装 Node.js v26（浏览器自动化 Playwright 依赖）；④ 准备 Git / PortableGit（终端工具执行命令所需的 bash.exe）；⑤ 克隆仓库 + 创建虚拟环境（代码放在 %LOCALAPPDATA%\\hermes\\hermes-agent 或 ~/.local/share/hermes/）。用户无需手动安装任何运行时依赖。\n\n**关键约束：Python 版本必须在 3.11 ~ 3.13 之间**（包元数据 Requires-Python: >=3.11,<3.14）。若本机是 Python 3.14，直接 pip 安装会失败 —— 但官方一键脚本会自动帮你装 3.11，所以是安全的。只有手动安装时才需要注意这个约束。' },
       { title: '内置组件作用', body: [
         'uv — Python 包管理器 + 虚拟环境生命周期管理',
-        'Python 3.11+ — Hermes 本体运行环境（隔离 venv）',
-        'Node.js v18+ — 浏览器自动化（Playwright）依赖',
+        'Python 3.11 ~ 3.13 — Hermes 本体运行环境（隔离 venv）。注意：<3.14 是硬约束',
+        'Node.js v18+（官方脚本装 v26）— 浏览器自动化（Playwright）依赖',
+        'Git / PortableGit — 终端工具执行命令依赖的 bash.exe（Windows 上尤其关键）',
         'ripgrep (rg) — 项目内快速文件搜索（系统 PATH）',
         'ffmpeg — TTS / 音频格式转换（系统 PATH）',
-        'hermes CLI — 全局命令入口（~/.local/bin 或 /usr/local/bin）'
+        'hermes CLI — 全局命令入口（~/.local/bin 或 /usr/local/bin，或手写 hermes.cmd）'
       ]},
       { title: '平台安装命令', body: [
         'Linux / macOS / WSL2 / Termux:  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',
         'Windows 原生（PowerShell）:     iex (irm https://hermes-agent.nousresearch.com/install.ps1)',
-        'Windows 推荐: 先装 WSL2，再在 WSL2 中跑 curl 脚本；也可下载 Hermes Desktop 安装器'
+        'Windows 推荐: 先装 WSL2，再在 WSL2 中跑 curl 脚本；也可下载 Hermes Desktop 安装器',
+        '⚠ 安装完必须重启终端（或 source ~/.bashrc） PATH 才生效；普通用户默认 ~/.local/bin，root 模式 /usr/local/bin'
       ]},
-      { title: '环境变量配置', body: '安装后将二进制路径加入 shell PATH：普通用户默认 ~/.local/bin，root 模式 /usr/local/bin。重载 shell 后即可全局使用 hermes 命令。' }
+      { title: '真机证据与手动复刻', body: [
+        '官方一键脚本实测输出（v0.19.0）: hermes --version → Hermes Agent v0.19.0 (2026.7.20) / Python 3.13.7 / OpenAI SDK 2.24.0',
+        'Windows 沙箱无法写入 %LOCALAPPDATA% 时，可手动复刻安装器：准备 Python 3.13 zip → 创建 venv → pip install hermes-agent[messaging,dashboard] → 自写 hermes.cmd 启动器',
+        '自写启动器示例：设置 HERMES_HOME、PYTHONUTF8=1、HERMES_GIT_BASH_PATH 后调用 venv\\Scripts\\hermes.exe，等价于官方安装器写入的 hermes.cmd'
+      ]},
     ],
     codeExample: `<span class="hl-cmt"># ── Windows PowerShell 安装 ──</span>
 iex (irm https://hermes-agent.nousresearch.com/install.ps1)
@@ -671,8 +677,13 @@ hermes --new               <span class="hl-cmt"># 强制开启新会话</span>`,
       { title: '四要素关系', body: [
         'Provider（提供商）— 模型的来源：Nous Portal、Anthropic、OpenAI、OpenRouter、DeepSeek、自定义端点等。',
         'Model（模型）— 具体的模型标识符：例如 claude-sonnet-4-20250514、gpt-4o、deepseek-chat、llama3.1:70b。',
-        'Base URL（基础接口地址）— API 请求的 endpoint。官方 provider 通常内置，自定义端点需显式指定（Ollama / vLLM / 私有部署）。',
-        'API Key（鉴权密钥）— 访问凭证。通过环境变量（ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY）或 config.yaml 中的 api_key 字段注入。'
+        'Base URL（基础接口地址）— API 请求的 endpoint。官方 provider 通常内置（如 deepseek→https://api.deepseek.com/v1），自定义端点需显式指定（Ollama / vLLM / 私有部署）。',
+        'API Key（鉴权密钥）— 访问凭证。通过环境变量（ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY）或 config.yaml 中的 api_key 字段注入。',
+        '',
+        '**Hermes 的自动分流规则（实测）**：',
+        '  • `hermes config set` 时，**全大写下划线** 命名（如 `DEEPSEEK_API_KEY`）→ 自动写入 `.env`',
+        '  • **小写点号路径** 命名（如 `model.provider`、`model.default`）→ 自动写入 `config.yaml`',
+        '  • 用户无需自己判断，Hermes 根据命名规则自动分流机密与普通配置'
       ]},
       { title: '配置方式对比', body: [
         'Nous Portal:  hermes model → OAuth 登录。订阅覆盖 300+ 模型，附带 Tool Gateway（网页搜索、图像、TTS）。最省事的一站式方案。',
@@ -704,6 +715,21 @@ hermes setup --portal
 <span class="hl-kw"># 5. 自定义端点（Ollama 示例）</span>
 <span class="hl-cmt"># config.yaml 中设置 base_url: http://localhost:11434</span>
 <span class="hl-cmt"># 模型名如 llama3.1:70b，上下文务必 ≥64K</span>
+
+<span class="hl-cmt">── 非交互式配置（脚本 / 自动化场景）──</span>
+<span class="hl-cmt"># 机密自动进 .env，普通配置自动进 config.yaml（命名规则分流）</span>
+hermes config set DEEPSEEK_API_KEY sk-xxxxxxxxxxxxxxxx
+hermes config set model.provider deepseek
+hermes config set model.default  deepseek-v4-pro
+
+<span class="hl-cmt"># 回读确认</span>
+hermes config get model
+<span class="hl-cmt"># 预期输出：</span>
+<span class="hl-cmt"># provider: deepseek</span>
+<span class="hl-cmt"># default: deepseek-v4-pro</span>
+
+<span class="hl-cmt"># 配置迁移（升级 Hermes 后执行）</span>
+hermes config migrate
 
 <span class="hl-cmt">── config.yaml 片段 ──</span>
 <span class="hl-kw">model:</span>
@@ -754,24 +780,49 @@ hermes setup --portal
     title: 'CLI 常用命令',
     subtitle: '斜杠命令与会话管理',
     knowledge: [
-      { title: '斜杠命令体系', body: 'Hermes TUI/CLI 中以 / 开头的命令用于控制会话行为和查询状态，不经过模型推理，直接由 Hermes 解析执行。常用命令：' },
+      { title: '斜杠命令体系', body: 'Hermes TUI/CLI 中以 / 开头的命令用于控制会话行为和查询状态，不经过模型推理，直接由 Hermes 解析执行。常用命令及对应关系：' },
+      { title: '命令与状态对应关系（实测）', body: [
+        '/model    → 当前模型（例如 deepseek-v4-pro）',
+        '/tools    → 可用工具数量及列表（实测：Built-in toolsets (cli): ✓ enabled web ✓ enabled terminal ✓ enabled file ✓ enabled code_execution … 共 23 个工具集，其中 17 个启用）',
+        '/status   → 会话状态：模型、工具数、上下文长度、内存占用',
+        '/context  → 当前上下文内容摘要（系统提示、历史、待办）',
+        '/skills   → 已安装技能列表；/skills create <name> 手动创建空技能；/skills browse 浏览全部',
+        '横幅实测内容：模型名 · 提供商 / 工作目录 / Session ID / 工具数 · skills 数 / /help for commands'
+      ]},
       { title: '会话管理机制', body: [
         '每次 hermes 启动创建一个新会话（除非使用 --continue / --session）。',
         '会话记录保存在 ~/.hermes/sessions/，包含完整对话历史、工具调用记录。',
         'hermes sessions 列出所有存档会话，hermes --session <id> 跳转指定会话。',
-        'hermes --continue（或 -c）恢复最近一次会话，适合断点续谈。'
+        'hermes --continue（或 -c）恢复最近一次会话，适合断点续谈。',
+        'hermes -z "提示词"  为非交互式单次问答模式（适合脚本自动化验证）'
       ]}
     ],
-    codeExample: `<span class="hl-cmt">── 核心斜杠命令 ──</span>
+    codeExample: `<span class="hl-cmt">── 核心斜杠命令（在 TUI/CLI 中输入） ──</span>
 
 <span class="hl-kw">/help</span>          显示所有可用命令与快捷键
-<span class="hl-kw">/model</span>         查看或切换当前模型
-<span class="hl-kw">/tools</span>         列出当前可调用的工具（内置 + MCP）
+<span class="hl-kw">/model</span>         查看或切换当前模型（实测输出：deepseek-v4-pro）
+<span class="hl-kw">/tools</span>         列出当前可调用的工具（实测：Built-in toolsets (cli): ✓ enabled web ✓ enabled terminal ✓ enabled file ✓ enabled code_execution … 共 23 个工具集，其中 17 个启用）
 <span class="hl-kw">/status</span>        显示会话状态：模型、工具数、上下文长度、内存占用
 <span class="hl-kw">/context</span>       查看当前上下文内容摘要（系统提示、历史、待办）
 <span class="hl-kw">/skills</span>        列出已安装技能；/skills create &lt;name&gt; 手动创建空技能
 <span class="hl-kw">/skills browse</span> 浏览全部可用技能
 <span class="hl-kw">&lt;skill_name&gt;</span> 直接调用技能（例如 /git-commit-helper）
+
+<span class="hl-cmt">── 交互式 CLI 启动横幅（实测内容节选） ──</span>
+<span class="hl-cmt"># Hermes Agent v0.19.0 (2026.7.20)</span>
+<span class="hl-cmt">#</span>
+<span class="hl-cmt"># Available Tools</span>
+<span class="hl-cmt"># browser: browser_back, browser_click, …</span>
+<span class="hl-cmt"># clarify: clarify</span>
+<span class="hl-cmt"># code_execution: execute_code</span>
+<span class="hl-cmt"># file: patch, read_file, search_files, write_file</span>
+<span class="hl-cmt"># (and 9 more toolsets…)</span>
+<span class="hl-cmt">#</span>
+<span class="hl-cmt"># Status</span>
+<span class="hl-cmt"># **deepseek-v4-pro** · Nous Research</span>
+<span class="hl-cmt"># P:\\student_task\\24llm\\test1\\demo</span>
+<span class="hl-cmt"># Session: 20260922_163415_647dda</span>
+<span class="hl-cmt"># 17 tools · 0 skills · /help for commands</span>
 
 <span class="hl-cmt">── 会话管理命令（终端中运行） ──</span>
 
@@ -780,7 +831,14 @@ hermes --tui         <span class="hl-cmt"># 启动新会话（TUI，推荐）</s
 hermes --continue    <span class="hl-cmt"># 或 hermes -c，恢复最近会话</span>
 hermes sessions      <span class="hl-cmt"># 列出所有存档会话</span>
 hermes --session &lt;id&gt;  <span class="hl-cmt"># 跳转进入指定会话</span>
-hermes --new         <span class="hl-cmt"># 强制开启新会话（忽略最近会话）</span>`,
+hermes --new         <span class="hl-cmt"># 强制开启新会话（忽略最近会话）</span>
+hermes -z &lt;prompt&gt;    <span class="hl-cmt"># 非交互式单次问答（适合脚本自动化验证）</span>
+
+<span class="hl-cmt">── 非交互式验证示例 ──</span>
+hermes -z "Reply with exactly: HERMES_OK and then state which model you are."
+<span class="hl-cmt"># 预期输出：</span>
+<span class="hl-cmt"># HERMES_OK</span>
+<span class="hl-cmt"># I am DeepSeek-V4-Pro, running on the Hermes Agent framework by Nous Research.</span>`,
     expand: {
       title: '🔌 拓展：OpenAI / Anthropic 官方 CLI 的命令模式对比',
       body: [
@@ -823,17 +881,21 @@ hermes --new         <span class="hl-cmt"># 强制开启新会话（忽略最近
     knowledge: [
       { title: '~/.hermes 目录结构', body: [
         '~/.hermes/                    — Hermes 主配置目录',
-        '  config.yaml                 — 普通配置（模型、provider、MCP 服务器、connector）',
-        '  .env                        — 密钥配置（API Key 等敏感信息，gitignore 保护）',
+        '  config.yaml                 — 普通配置（模型、provider、MCP 服务器、connector、_config_version）',
+        '  .env                        — 机密配置（API Key 等敏感信息，gitignore 保护）。对应实测命令：hermes doctor → ✓ .env file exists',
         '  memories/                   — 记忆文件（USER.md, MEMORY.md, sessions/）',
         '  skills/                     — 用户安装的技能目录',
         '  logs/                       — 运行日志，排错时查看',
-        '  sessions/                   — 会话存档'
+        '  sessions/                   — 会话存档',
+        '  SOUL.md                     — 角色设定（persona），实测可存在（✓ P:\\...\\.hermes\\SOUL.md exists (persona configured)）',
+        '  state.db                    — 状态数据库，记录 sessions 计数（实测：✓ state.db exists (1 sessions)）'
       ]},
-      { title: 'config.yaml 普通配置', body: 'config.yaml 存放非敏感配置：模型选择、provider 设置、MCP 服务器定义、connector 配置、技能路径等。使用 YAML 语法，缩进必须为两个空格。' },
-      { title: '.env 密钥配置的区别', body: 'API Key 等敏感信息不应明文写在 config.yaml 中。推荐使用 .env 文件或环境变量，并在 config.yaml 中用 ${VAR_NAME} 语法引用。这样密钥与配置分离，便于 gitignore 保护、方便在不同环境间切换。' }
+      { title: 'config.yaml 普通配置', body: 'config.yaml 存放非敏感配置：模型选择、provider 设置、MCP 服务器定义、connector 配置、技能路径等。使用 YAML 语法，缩进必须为两个空格。版本字段 _config_version（实测 v33）用于配置迁移。' },
+      { title: '.env 密钥配置的区别', body: 'API Key 等敏感信息不应明文写在 config.yaml 中。**Hermes 的自动分流规则：** `hermes config set` 时，全大写下划线命名（如 `DEEPSEEK_API_KEY`）→ 自动写入 `.env`；小写点号路径命名（如 `model.provider`）→ 自动写入 `config.yaml`。用户无需自己判断。此外，形似密钥的字符串在输出和日志里会自动被打码。' }
     ],
     codeExample: `<span class="hl-cmt">── ~/.hermes/config.yaml 示例 ──</span>
+
+<span class="hl-kw">_config_version:</span> 33    <span class="hl-cmt"># 配置版本（实测 v33），升级后需 migrate</span>
 
 <span class="hl-kw">model:</span>
   <span class="hl-prop">provider:</span> openai
@@ -864,6 +926,23 @@ OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 DEEPSEEK_API_KEY=sk-...
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+
+<span class="hl-cmt">── 实测 hermes doctor 输出（Step 5 验收证据） ──</span>
+hermes doctor
+<span class="hl-cmt"># ✓ P:\\student_task\\24llm\\test1\\.hermes/.env file exists</span>
+<span class="hl-cmt"># ✓ P:\\student_task\\24llm\\test1\\.hermes/config.yaml exists</span>
+<span class="hl-cmt"># ✓ P:\\student_task\\24llm\\test1\\.hermes/SOUL.md exists (persona configured)</span>
+<span class="hl-cmt"># ✓ P:\\student_task\\24llm\\test1\\.hermes/state.db exists (1 sessions)</span>
+<span class="hl-cmt"># ✓ API key or custom endpoint configured</span>
+<span class="hl-cmt"># ✓ Config version up to date (v33)</span>
+
+<span class="hl-cmt">── 非交互式配置（命名规则自动分流） ──</span>
+<span class="hl-cmt"># 大写下划线 → .env；小写点号路径 → config.yaml</span>
+hermes config set DEEPSEEK_API_KEY sk-xxxxxxxxxxxxxxxx
+hermes config set model.provider deepseek
+hermes config set model.default  deepseek-v4-pro
+hermes config get model   <span class="hl-cmt"># 回读：provider: deepseek / default: deepseek-v4-pro</span>
+hermes config migrate    <span class="hl-cmt"># 升级 Hermes 后执行，更新 _config_version</span>
 
 <span class="hl-cmt">── 环境变量在 shell 中的设置 ──</span>
 
@@ -910,41 +989,84 @@ TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
       { title: 'Tool Calling 原理', body: 'Tool Calling（亦称 Function Calling）是 LLM 接收工具描述（名称、参数 schema、描述文字）后，判断是否需要调用外部工具，并输出结构化的工具调用请求的能力。Hermes 负责解析模型输出、执行工具、将结果返回模型，模型最终组织成自然语言回答。' },
       { title: 'Hermes 内置工具', body: [
         'read_file / read_text_file — 读取本地文件内容，支持多种格式',
-        'write_file / write_text_file — 向本地写入文件，可创建新文件或覆盖',
-        'run_shell / run_terminal — 在本地 shell 执行命令，返回 stdout/stderr',
+        'write_file / write_text_file — 向本地写入文件，可创建新文件或覆盖（实测产出：demo/result/report.md）',
+        'run_shell / run_terminal — 在本地 shell 执行命令，返回 stdout/stderr。依赖 Git Bash（Windows 上）：终端日志可见 tools.terminal_tool - local environment ready for task default',
         'search_web — 通过 Tool Gateway 或自定义搜索引擎搜索网络',
-        'browse / browser — 启动浏览器访问页面、截图、提取 DOM 内容',
+        'browse / browser — 启动浏览器访问页面、截图、提放 DOM 内容',
         'edit_file — 对现有文件进行局部编辑（删改指定行区间）',
-        '其他：TTS (语音合唱)、图像生成、代码执行等，取决于所接入的 Tool Gateway'
+        'search_files — 项目内快速文件搜索（ripgrep 后端）',
+        'code_execution — 执行代码片段',
+        '其他：TTS（语音合唱）、图像生成、代码执行等，取决于所接入的 Tool Gateway。实测 tools list 显示共 23 个工具集，其中 17 个启用'
       ]},
-      { title: '完整实操案例', body: '以「读取项目 README、统计代码行数、生成总结报告」为例：模型先调用 read_file 读取 README → 调用 run_shell 执行 wc -l 和 rg 统计 → 将结果汇总输出为 write_file 写入 report.md。全程由模型自主决策工具调用顺序。' }
+      { title: '完整实操案例（真机实测）', body: [
+        '**Step 6 输入数据**：test1/demo/data/scores.csv — 10 名学生 4 个字段，含出勤率与低分样本（335 B）',
+        '**用户 prompt**：`hermes chat -q "读取 data/scores.csv，统计每科平均分与总分，找出总分最高的学生和需要重点关注（总分低于210）的学生，并把结果写成 result/report.md，同时在终端打印这个文件的完整内容。"`',
+        '**模型自主调用流程（终端可见日志）**：',
+        '  1. tools.terminal_tool - local environment ready for task default',
+        '  2. agent.tool_executor - tool terminal completed (1.63s, 193 chars) — 第一次终端调用',
+        '  3. agent.tool_executor - tool terminal completed (0.31s, 58 chars) — 第二次终端调用',
+        '  4. Turn ended: reason=text_response model=deepseek-v4-pro api_calls=2/90 tool_turns=1',
+        '**产出文件**：demo/result/report.md（540 B，由 Hermes 通过 write_file 工具真实落盘）',
+        '**人工复核结论（与模型输出一致）**：语文平均 78.0、数学 76.6、英语 78.5；总分最高王五 287 分；总分低于 210 的 3 人（周九 166、赵六 189、王二 196）—— 人工重算完全一致'
+      ]},
+      { title: '工具调用日志解读要点', body: [
+        'log 中 `api_calls=2/90` 表示本轮耗费 2 次 API 调用（上限 90），`tool_turns=1` 表示工具调用回合数',
+        '`latency=2.7s cache=13440/13596 (99%)` 暗示提示词缓存（prompt cache）命中率 99%，第二次提问更快更便宜',
+        '工具执行时间分布（1.63s + 0.31s）可用于定位慢速环节'
+      ]}
     ],
-    codeExample: `<span class="hl-cmt">── 实操案例：读取 + 统计 + 生成报告 ──</span>
+    codeExample: `<span class="hl-cmt">── 真机实测命令：scores.csv 统计 → report.md ──</span>
 
-<span class="hl-cmt">用户 prompt（在 hermes --tui 中输入）：</span>
-<span class="hl-str">读取当前项目的 README.md，统计所有 Python 文件的代码行数，</span>
-<span class="hl-str">并将结果写入 report.md。</span>
+<span class="hl-cmt"># 准备输入数据（10 名学生，4 个字段，含出勤率与低分样本）</span>
+mkdir demo/data demo/result
+<span class="hl-cmt"># 将 scores.csv 放入 demo/data/ （335 B）</span>
 
-<span class="hl-cmt">模型自主决定调用以下工具（终端中可见调用记录）：</span>
+<span class="hl-cmt"># 用户 prompt（非交互式，适合复现）</span>
+hermes chat -q <span class="hl-str">"读取 data/scores.csv，统计每科平均分与总分，</span>
+<span class="hl-str">找出总分最高的学生和需要重点关注（总分低于210）的学生，</span>
+<span class="hl-str">并把结果写成 result/report.md，同时在终端打印这个文件的完整内容。"</span>
 
-<span class="hl-kw">1. read_file</span>(<span class="hl-prop">path:</span> <span class="hl-str">"README.md"</span>)
-<span class="hl-cmt">   → 返回 README 内容</span>
+<span class="hl-cmt">── 终端中可见的真实调用日志节选 ──</span>
+<span class="hl-cmt"># 🛠️ Loaded 17 tools: … read_file, search_files, terminal, write_file …</span>
+<span class="hl-cmt"># tools.terminal_tool - local environment ready for task default</span>
+<span class="hl-cmt"># agent.tool_executor - tool terminal completed (1.63s, 193 chars)</span>
+<span class="hl-cmt"># agent.tool_executor - tool terminal completed (0.31s, 58 chars)</span>
+<span class="hl-cmt"># Turn ended: reason=text_response model=deepseek-v4-pro api_calls=2/90 tool_turns=1</span>
+<span class="hl-cmt">#</span>
+<span class="hl-cmt"># → 产出文件 demo/result/report.md（540 B）</span>
 
-<span class="hl-kw">2. run_shell</span>(<span class="hl-prop">command:</span> <span class="hl-str">"find . -name '*.py' -exec wc -l {} + | tail -1"</span>)
-<span class="hl-cmt">   → 返回 Python 文件总行数</span>
+<span class="hl-cmt">── 产出文件内容（已人工复核，与模型输出一致） ──</span>
+<span class="hl-str">## 成绩统计报告</span>
+<span class="hl-str">### 平均分</span>
+<span class="hl-str">- 语文：78.0 分</span>
+<span class="hl-str">- 数学：76.6 分</span>
+<span class="hl-str">- 英语：78.5 分</span>
+<span class="hl-str">### 总分最高</span>
+<span class="hl-str">- 王五：287 分</span>
+<span class="hl-str">### 需重点关注（总分低于 210）</span>
+<span class="hl-str">- 周九：166 分</span>
+<span class="hl-str">- 赵六：189 分</span>
+<span class="hl-str">- 王二：196 分</span>
 
-<span class="hl-kw">3. write_file</span>(<span class="hl-prop">path:</span> <span class="hl-str">"report.md"</span>, <span class="hl-prop">content:</span> <span class="hl-str">"## 项目总结\n- README: ...\n- Python 总行数: 1234\n"</span>)
-<span class="hl-cmt">   → report.md 创建成功</span>
+<span class="hl-cmt">── 查看已安装工具（实测） ──</span>
+hermes tools list
+<span class="hl-cmt"># Built-in toolsets (cli):</span>
+<span class="hl-cmt"># ✓ enabled web 🔍 Web Search & Scraping</span>
+<span class="hl-cmt"># ✓ enabled terminal 💻 Terminal & Processes</span>
+<span class="hl-cmt"># ✓ enabled file 📁 File Operations</span>
+<span class="hl-cmt"># ✓ enabled code_execution ⚡ Code Execution</span>
+<span class="hl-cmt"># ... (共 23 个工具集，其中 17 个启用)</span>
 
-<span class="hl-cmt">── 查看已安装工具 ──</span>
-/tools
-<span class="hl-cmt"># 列出所有可用工具（内置 + MCP 提供的）</span>
+<span class="hl-cmt">── 提示词缓存（prompt cache）实测证据 ──</span>
+<span class="hl-cmt"># 第二次提问时日志出现：</span>
+<span class="hl-cmt"># API call #2: model=deepseek-v4-pro in=13596 out=93 total=13689</span>
+<span class="hl-cmt"># latency=2.7s cache=13440/13596 (99%)</span>
+<span class="hl-cmt"># → 缓存命中 99%，命中部分计费大幅折扣（常见 1/10）。频繁换模型会清空缓存！</span>
 
 <span class="hl-cmt">── 对比：OpenAI Function Calling 官方标准（curl 示例） ──</span>
-
-curl https://api.openai.com/v1/chat/completions \\
-  -H <span class="hl-str">"Authorization: Bearer $OPENAI_API_KEY"</span> \\
-  -H <span class="hl-str">"Content-Type: application/json"</span> \\
+curl https://api.openai.com/v1/chat/completions \\\\
+  -H <span class="hl-str">"Authorization: Bearer $OPENAI_API_KEY"</span> \\\\
+  -H <span class="hl-str">"Content-Type: application/json"</span> \\\\
   -d <span class="hl-str">'{
     "model": "gpt-4o",
     "messages": [{
@@ -970,11 +1092,10 @@ curl https://api.openai.com/v1/chat/completions \\
 <span class="hl-cmt"># OpenAI 返回工具调用请求，开发者执行后再将结果送回模型。</span>
 
 <span class="hl-cmt">── 对比：Anthropic Tool Use（curl 示例） ──</span>
-
-curl https://api.anthropic.com/v1/messages \\
-  -H <span class="hl-str">"x-api-key: $ANTHROPIC_API_KEY"</span> \\
-  -H <span class="hl-str">"Content-Type: application/json"</span> \\
-  -H <span class="hl-str">"anthropic-version: 2023-06-01"</span> \\
+curl https://api.anthropic.com/v1/messages \\\\
+  -H <span class="hl-str">"x-api-key: $ANTHROPIC_API_KEY"</span> \\\\
+  -H <span class="hl-str">"Content-Type: application/json"</span> \\\\
+  -H <span class="hl-str">"anthropic-version: 2023-06-01"</span> \\\\
   -d <span class="hl-str">'{
     "model": "claude-sonnet-4-20250514",
     "max_tokens": 1024,
